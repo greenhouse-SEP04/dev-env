@@ -53,7 +53,7 @@ services:
       api:
         condition: service_started
     ports:
-      - "${WEB_HOST_PORT:-3000}:3000"
+      - "${WEB_HOST_PORT:-3000}:80"
 
 volumes:
   pgdata:
