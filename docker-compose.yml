@@ -1,0 +1,59 @@
+﻿version: "3.9"
+
+services:
+# ──────────────────────────
+# 1. PostgreSQL
+# ──────────────────────────
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-greenhouse}
+      POSTGRES_USER:     ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      retries: 5
+
+# ──────────────────────────
+# 2. ASP.NET 9 back-end API
+# ──────────────────────────
+  api:
+    build:
+      context: ../api        # ← sibling repo
+    env_file:
+      - .env                 # every key in .env is injected into the container
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${API_HOST_PORT:-8080}:8080"
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      # build connection string from the same vars the DB uses
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=${POSTGRES_DB:-greenhouse};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}
+      JWT__ValidIssuer:         ${JWT__ValidIssuer:-GreenhouseApi}
+      JWT__ValidAudience:       ${JWT__ValidAudience:-GreenhouseApiUsers}
+      JWT__Secret:              ${JWT__Secret:-CHANGE_ME_FOR_PROD}
+      WorkerCredentials__Username: ${WorkerCredentials__Username:-ml-worker}
+      WorkerCredentials__Password: ${WorkerCredentials__Password:-Super!Secure!PW}
+
+# ──────────────────────────
+# 3. React + Vite front-end
+# ──────────────────────────
+  web:
+    build:
+      context: ../web         # ← sibling repo
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://api:8080}
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "${WEB_HOST_PORT:-3000}:80"
+
+volumes:
+  pgdata:
