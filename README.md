@@ -95,21 +95,6 @@ All overridable settings live in **`.env`**. Safe defaults mean you can ignore t
 | `docker compose exec db psql -U $POSTGRES_USER $POSTGRES_DB` | Open Postgres shell                          |
 | `docker compose down -v`                                     | Tear down containers *and* delete volumes    |
 
----
-
-## FAQ
-
-<details>
-<summary>I changed code but don’t see updates.</summary>
-The default compose file makes a release build. For live reload you can either mount your source code (`volumes:`) or run the apps outside Docker.
-</details>
-
-<details>
-<summary>Port already in use?</summary>
-Set `API_HOST_PORT` / `WEB_HOST_PORT` in `.env` before starting the stack.
-</details>
-
-<details>
 <summary>How do I run tests in CI?</summary>
 CI pipelines typically check out this repo, set a custom `.env`, then call `docker compose --profile ci up -d` to run headless.
 </details>
