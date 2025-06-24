@@ -24,6 +24,7 @@
   api:
     build:
       context: ../api        # ← sibling repo
+      dockerfile: src/Api/Dockerfile
     env_file:
       - .env                 # every key in .env is injected into the container
     depends_on:
