@@ -21,56 +21,7 @@ services:
       retries: 5
 
   # ──────────────────────────
-  # 2. ASP.NET 9 back-end API
-  # ──────────────────────────
-  api:
-    build:
-      context: ../Api        # ← sibling repo
-    env_file:
-      - .env                 # pulls in both DB and AWS vars
-    depends_on:
-      db:
-        condition: service_healthy
-      localstack:
-        condition: service_started
-    ports:
-      - "${API_HOST_PORT}:8080"
-    environment:
-      SEED_DB: "true"
-      ASPNETCORE_URLS: http://+:8080
-
-      # build connection string from the same vars the DB uses
-      ConnectionStrings__DefaultConnection: >-
-        Host=db;Port=5432;
-        Database=${POSTGRES_DB};
-        Username=${POSTGRES_USER};
-        Password=${POSTGRES_PASSWORD}
-
-      JWT__ValidIssuer:         ${JWT__ValidIssuer}
-      JWT__ValidAudience:       ${JWT__ValidAudience}
-      JWT__Secret:              ${JWT__Secret}
-
-      WorkerCredentials__Username: ${WorkerCredentials__Username}
-      WorkerCredentials__Password: ${WorkerCredentials__Password}
-
-  # ──────────────────────────
-  # 3. React + Vite front-end
-  # ──────────────────────────
-  web:
-    build:
-      context: ../web         # ← sibling repo
-      args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
-    env_file:
-      - .env
-    depends_on:
-      api:
-        condition: service_started
-    ports:
-      - "${WEB_HOST_PORT}:80"
-
-  # ──────────────────────────
-  # 4. LocalStack (AWS emulator)
+  # 2. LocalStack (AWS emulator)
   # ──────────────────────────
   localstack:
     image: localstack/localstack:latest
@@ -83,6 +34,85 @@ services:
       DATA_DIR: /tmp/localstack/data
     volumes:
       - ./localstack_data:/tmp/localstack/data
+    healthcheck:
+      test: ["CMD-SHELL", "awslocal s3 ls"]
+      interval: 10s
+      retries: 5
+
+  # ──────────────────────────
+  # 3. ASP.NET 9 back-end API
+  # ──────────────────────────
+  api:
+    build:
+      context: ../api              # ← sibling repo
+    env_file:
+      - .env                       # pulls in both DB and AWS vars
+    depends_on:
+      db:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    ports:
+      - "${API_HOST_PORT}:8080"
+    environment:
+      SEED_DB: "true"
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: >-
+        Host=db;Port=5432;
+        Database=${POSTGRES_DB};
+        Username=${POSTGRES_USER};
+        Password=${POSTGRES_PASSWORD}
+      JWT__ValidIssuer:         ${JWT__ValidIssuer}
+      JWT__ValidAudience:       ${JWT__ValidAudience}
+      JWT__Secret:              ${JWT__Secret}
+      WorkerCredentials__Username: ${WorkerCredentials__Username}
+      WorkerCredentials__Password: ${WorkerCredentials__Password}
+      AWS__Region:              ${AWS_DEFAULT_REGION}
+      AWS__TelemetryBucket:     ${telemetry_bucket:-greenhouse-telemetry-bucket}
+      AWS__ServiceURL:          http://localstack:4566
+
+  # ──────────────────────────
+  # 4. ML Service (Python Lambda)
+  # ──────────────────────────
+  ml:
+    build:
+      context: ../mal           # ← sibling repo
+    working_dir: /app
+    volumes:
+      - ../mal/src:/app/src:delegated
+    command: bash -c "pip install --no-cache-dir -r requirements.txt && python -u src/greenhouse_ml_service.py"
+    env_file:
+      - .env
+    environment:
+      AWS_ENDPOINT_URL: http://localstack:4566
+      S3_BUCKET: greenhouse-ml-artifacts
+      MIN_SAMPLES: 10
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+  # ──────────────────────────
+  # 5. React + Vite front-end (with HMR)
+  # ──────────────────────────
+  web:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ../web:/app:delegated
+      - /app/node_modules
+    ports:
+      - "${WEB_HOST_PORT}:3000"
+    environment:
+      VITE_API_BASE_URL: http://api:8080
+    depends_on:
+      api:
+        condition: service_started
+    command: >
+      sh -c "
+        corepack enable &&
+        pnpm install &&
+        pnpm dev -- --host 0.0.0.0
+      "
 
 volumes:
   pgdata:
