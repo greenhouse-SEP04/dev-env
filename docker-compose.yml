@@ -8,15 +8,15 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_DB:       ${POSTGRES_DB:-greenhouse}
-      POSTGRES_USER:     ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB:       ${POSTGRES_DB}
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       retries: 5
 
@@ -27,30 +27,31 @@ services:
     build:
       context: ../Api        # ← sibling repo
     env_file:
-      - .env                 # inject all your .env vars
+      - .env                 # pulls in both DB and AWS vars
     depends_on:
       db:
         condition: service_healthy
       localstack:
         condition: service_started
     ports:
-      - "${API_HOST_PORT:-8080}:8080"
+      - "${API_HOST_PORT}:8080"
     environment:
       SEED_DB: "true"
       ASPNETCORE_URLS: http://+:8080
-      # build connection string from the same vars the DB uses
-      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=${POSTGRES_DB:-greenhouse};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}
-      JWT__ValidIssuer:         ${JWT__ValidIssuer:-GreenhouseApi}
-      JWT__ValidAudience:       ${JWT__ValidAudience:-GreenhouseApiUsers}
-      JWT__Secret:              ${JWT__Secret:-CHANGE_ME_FOR_PROD}
-      WorkerCredentials__Username: ${WorkerCredentials__Username:-ml-worker}
-      WorkerCredentials__Password: ${WorkerCredentials__Password:-Super!Secure!PW}
 
-      # — LocalStack AWS overrides —
-      AWS_ACCESS_KEY_ID:     test
-      AWS_SECRET_ACCESS_KEY: test
-      AWS_DEFAULT_REGION:    us-east-1
-      AWS_ENDPOINT_URL:      http://localstack:4566
+      # build connection string from the same vars the DB uses
+      ConnectionStrings__DefaultConnection: >-
+        Host=db;Port=5432;
+        Database=${POSTGRES_DB};
+        Username=${POSTGRES_USER};
+        Password=${POSTGRES_PASSWORD}
+
+      JWT__ValidIssuer:         ${JWT__ValidIssuer}
+      JWT__ValidAudience:       ${JWT__ValidAudience}
+      JWT__Secret:              ${JWT__Secret}
+
+      WorkerCredentials__Username: ${WorkerCredentials__Username}
+      WorkerCredentials__Password: ${WorkerCredentials__Password}
 
   # ──────────────────────────
   # 3. React + Vite front-end
@@ -59,15 +60,14 @@ services:
     build:
       context: ../web         # ← sibling repo
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://api:8080}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    env_file:
+      - .env
     depends_on:
       api:
         condition: service_started
     ports:
-      - "${WEB_HOST_PORT:-3000}:80"
-    environment:
-      # If your web app ever needs to call AWS directly:
-      VITE_AWS_ENDPOINT_URL: ${VITE_AWS_ENDPOINT_URL:-http://localstack:4566}
+      - "${WEB_HOST_PORT}:80"
 
   # ──────────────────────────
   # 4. LocalStack (AWS emulator)
@@ -78,7 +78,7 @@ services:
     ports:
       - "4566:4566"    # unified AWS API
     environment:
-      SERVICES: s3,lambda,sts    # only the services you need
+      SERVICES: s3,lambda,sts
       DEBUG: "1"
       DATA_DIR: /tmp/localstack/data
     volumes:
