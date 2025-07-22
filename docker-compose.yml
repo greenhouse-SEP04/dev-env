@@ -1,7 +1,9 @@
-﻿services:
-# ──────────────────────────
-# 1. PostgreSQL
-# ──────────────────────────
+version: "3.8"
+
+services:
+  # ──────────────────────────
+  # 1. PostgreSQL
+  # ──────────────────────────
   db:
     image: postgres:16
     restart: unless-stopped
@@ -10,7 +12,7 @@
       POSTGRES_USER:     ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
-      - "5432:5432"           
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -18,17 +20,19 @@
       interval: 5s
       retries: 5
 
-# ──────────────────────────
-# 2. ASP.NET 9 back-end API
-# ──────────────────────────
+  # ──────────────────────────
+  # 2. ASP.NET 9 back-end API
+  # ──────────────────────────
   api:
     build:
       context: ../Api        # ← sibling repo
     env_file:
-      - .env                 # every key in .env is injected into the container
+      - .env                 # inject all your .env vars
     depends_on:
       db:
         condition: service_healthy
+      localstack:
+        condition: service_started
     ports:
       - "${API_HOST_PORT:-8080}:8080"
     environment:
@@ -42,9 +46,15 @@
       WorkerCredentials__Username: ${WorkerCredentials__Username:-ml-worker}
       WorkerCredentials__Password: ${WorkerCredentials__Password:-Super!Secure!PW}
 
-# ──────────────────────────
-# 3. React + Vite front-end
-# ──────────────────────────
+      # — LocalStack AWS overrides —
+      AWS_ACCESS_KEY_ID:     test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION:    us-east-1
+      AWS_ENDPOINT_URL:      http://localstack:4566
+
+  # ──────────────────────────
+  # 3. React + Vite front-end
+  # ──────────────────────────
   web:
     build:
       context: ../web         # ← sibling repo
@@ -55,6 +65,25 @@
         condition: service_started
     ports:
       - "${WEB_HOST_PORT:-3000}:80"
+    environment:
+      # If your web app ever needs to call AWS directly:
+      VITE_AWS_ENDPOINT_URL: ${VITE_AWS_ENDPOINT_URL:-http://localstack:4566}
+
+  # ──────────────────────────
+  # 4. LocalStack (AWS emulator)
+  # ──────────────────────────
+  localstack:
+    image: localstack/localstack:latest
+    container_name: localstack
+    ports:
+      - "4566:4566"    # unified AWS API
+    environment:
+      SERVICES: s3,lambda,sts    # only the services you need
+      DEBUG: "1"
+      DATA_DIR: /tmp/localstack/data
+    volumes:
+      - ./localstack_data:/tmp/localstack/data
 
 volumes:
   pgdata:
+  localstack_data:
