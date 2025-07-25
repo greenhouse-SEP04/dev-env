@@ -29,7 +29,7 @@ services:
     ports:
       - "4566:4566"
     environment:
-      SERVICES:                 s3,lambda,sts,ecr,ecs,events,iam,cloudwatch,ec2,rds,secretsmanager,cloudfront,elb,elbv2
+      SERVICES:                 s3,lambda,sts,ecr,ecs,events,iam,cloudwatch,ec2,rds,secretsmanager,cloudfront,elb,elbv2,registry
       DEBUG:                    "1"
       DATA_DIR:                 /var/lib/localstack
       LOCALSTACK_AUTH_TOKEN:    ${LOCALSTACK_AUTH_TOKEN}
