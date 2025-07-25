@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   # ──────────────────────────
   # 1. PostgreSQL
@@ -27,19 +29,27 @@ services:
     ports:
       - "4566:4566"
     environment:
-      SERVICES: s3,lambda,sts,ecr,ecs,events,iam,cloudwatch,ec2,rds,secretsmanager,cloudfront
-      DEBUG: "1"
-      DATA_DIR: /var/lib/localstack
-      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN}
+      SERVICES:                 s3,lambda,sts,ecr,ecs,events,iam,cloudwatch,ec2,rds,secretsmanager,cloudfront,elb,elbv2
+      DEBUG:                    "1"
+      DATA_DIR:                 /var/lib/localstack
+      LOCALSTACK_AUTH_TOKEN:    ${LOCALSTACK_AUTH_TOKEN}
+      # run Lambdas in‑process so no Docker socket is strictly required:
+      LAMBDA_EXECUTOR:          local
+      # if you ever switch back to Docker executor:
+      LAMBDA_REMOTE_DOCKER:     "false"
+      # (optional) network name if using custom Docker networks for your Lambdas:
+      # LAMBDA_DOCKER_NETWORK:    bridge
     volumes:
       - localstack_data:/var/lib/localstack
+      # mount host Docker for Docker‑in‑Docker support (not needed with local executor)
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD-SHELL", "awslocal s3 ls"]
       interval: 10s
       retries: 5
 
   # ──────────────────────────
-  # 3. ASP.NET 9 back-end API
+  # 3. ASP.NET Core back-end API
   # ──────────────────────────
   api:
     build:
@@ -54,21 +64,21 @@ services:
     ports:
       - "${API_HOST_PORT}:8080"
     environment:
-      SEED_DB: "true"
-      ASPNETCORE_URLS: http://+:8080
+      SEED_DB:                      "true"
+      ASPNETCORE_URLS:              http://+:8080
       ConnectionStrings__DefaultConnection: >-
         Host=db;Port=5432;
         Database=${POSTGRES_DB};
         Username=${POSTGRES_USER};
         Password=${POSTGRES_PASSWORD}
-      JWT__ValidIssuer:         ${JWT__ValidIssuer}
-      JWT__ValidAudience:       ${JWT__ValidAudience}
-      JWT__Secret:              ${JWT__Secret}
-      WorkerCredentials__Username: ${WorkerCredentials__Username}
-      WorkerCredentials__Password: ${WorkerCredentials__Password}
-      AWS__Region:              ${AWS_DEFAULT_REGION}
-      AWS__TelemetryBucket:     ${telemetry_bucket:-greenhouse-telemetry-bucket}
-      AWS__ServiceURL:          http://localstack:4566
+      JWT__ValidIssuer:             ${JWT__ValidIssuer}
+      JWT__ValidAudience:           ${JWT__ValidAudience}
+      JWT__Secret:                  ${JWT__Secret}
+      WorkerCredentials__Username:  ${WorkerCredentials__Username}
+      WorkerCredentials__Password:  ${WorkerCredentials__Password}
+      AWS__Region:                  ${AWS_DEFAULT_REGION}
+      AWS__TelemetryBucket:         ${telemetry_bucket:-greenhouse-telemetry-bucket}
+      AWS__ServiceURL:              http://localstack:4566
 
   # ──────────────────────────
   # 4. ML Service (Python Lambda)
@@ -84,8 +94,8 @@ services:
       - .env
     environment:
       AWS_ENDPOINT_URL: http://localstack:4566
-      S3_BUCKET: greenhouse-ml-artifacts
-      MIN_SAMPLES: 10
+      S3_BUCKET:         greenhouse-ml-artifacts
+      MIN_SAMPLES:       10
     depends_on:
       localstack:
         condition: service_healthy
